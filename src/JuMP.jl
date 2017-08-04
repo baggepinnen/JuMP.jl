@@ -74,7 +74,7 @@ const FIXREF = MOICON{MOI.SingleVariable,MOI.EqualTo{Float64}}
 const INTREF = MOICON{MOI.SingleVariable,MOI.Integer}
 const BINREF = MOICON{MOI.SingleVariable,MOI.ZeroOne}
 
-@MOIU.instance JuMPInstance (ZeroOne, Integer) (EqualTo, GreaterThan, LessThan, Interval) (Zeros, Nonnegatives, Nonpositives) () (SingleVariable,) (ScalarAffineFunction,) (VectorOfVariables,) (VectorAffineFunction,)
+@MOIU.instance JuMPInstance (ZeroOne, Integer) (EqualTo, GreaterThan, LessThan, Interval) (Zeros, Nonnegatives, Nonpositives, SecondOrderCone, PositiveSemidefiniteConeTriangle) () (SingleVariable,) (ScalarAffineFunction,) (VectorOfVariables,) (VectorAffineFunction,)
 
 # dummy solver
 type UnsetSolver <: MathOptInterface.AbstractSolver
@@ -380,7 +380,7 @@ objectivevalue(m::Model) = MOI.getattribute(m, MOI.ObjectiveValue())
 Return the objective sense, `:Min`, `:Max`, or `:Feasibility`.
 """
 function objectivesense(m::Model)
-    moisense = MOI.getattribute(m.instance, MOI.Sense())
+    moisense = MOI.getattribute(m.instance, MOI.ObjectiveSense())
     if moisense == MOI.MinSense
         return :Min
     elseif moisense == MOI.MaxSense
@@ -565,6 +565,22 @@ end
 # GenericRangeConstraint, LinearConstraint
 include("affexpr.jl")
 
+struct VectorAffineConstraint{S <: MOI.AbstractVectorSet} <: AbstractConstraint
+    func::Vector{AffExpr}
+    set::S
+end
+
+"""
+    addconstraint(m::Model, c::VectorAffineConstraint)
+
+Add the vector constraint `c` to `Model m`.
+"""
+function addconstraint(m::Model, c::VectorAffineConstraint)
+    @assert !m.solverinstanceattached # TODO
+    cref = MOI.addconstraint!(m.instance, MOI.VectorAffineFunction(c.func), c.set)
+    return ConstraintRef(m, cref)
+end
+
 # const LinConstrRef = ConstraintRef{Model,LinearConstraint}
 
 # LinearConstraint(ref::LinConstrRef) = ref.m.linconstr[ref.idx]::LinearConstraint
@@ -594,7 +610,7 @@ include("norms.jl")
 
 ##########################################################################
 # SDConstraint
-# include("sd.jl")
+include("sd.jl")
 
 # # internal method that doesn't print a warning if the value is NaN
 # _getDual(c::LinConstrRef) = c.m.linconstrDuals[c.idx]

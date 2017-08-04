@@ -23,7 +23,7 @@
 #############################################################################
 # GenericNorm
 # Container for Lp norms, ‖Ax‖p
-type GenericNorm{P,C,V}
+struct GenericNorm{P,C,V}
     terms::Vector{GenericAffExpr{C,V}}
 end
 # Preferred constructor, validates the norm type based on the expression
@@ -76,12 +76,12 @@ _build_norm(Lp, terms::Vector{GenericAffExpr}) = _build_norm(Lp, [terms...])
 # Alias for AffExprs. Short-hand used in operator overloads, etc.
 Norm{P} = GenericNorm{P,Float64,Variable}
 
-getvalue{P,C,V}(n::GenericNorm{P,C,V}) = norm(getvalue(n.terms),P)
+#getvalue{P,C,V}(n::GenericNorm{P,C,V}) = norm(getvalue(n.terms),P)
 
 ##########################################################################
 # GenericNormExpr
 # Container for expressions containing GenericNorm and GenericAffExpr
-type GenericNormExpr{P,C,V}
+struct GenericNormExpr{P,C,V}
     norm::GenericNorm{P,C,V}
     coeff::C
     aff::GenericAffExpr{C,V}
@@ -100,34 +100,32 @@ GenericSOCExpr{C,V} = GenericNormExpr{2,C,V}
 # Alias for ‖Ax‖₂ and AffExpr case
 const SOCExpr = GenericSOCExpr{Float64,Variable}
 
-# getvalue(n::GenericNormExpr) = n.coeff * getvalue(n.norm) + getvalue(n.aff)
+#getvalue(n::GenericNormExpr) = n.coeff * getvalue(n.norm) + getvalue(n.aff)
+
+#   ##########################################################################
+#   # GenericSOCConstraint
+#   # Second-order cone constraint of form
+#   # α||Ax-b||₂ + cᵀx + d ≤ 0
+#   struct GenericSOCConstraint{T<:GenericSOCExpr} <: AbstractConstraint
+#       normexpr::T
+#       function (::Type{GenericSOCConstraint{T}}){T}(normexpr::T)
+#           if normexpr.coeff < 0
+#               # The coefficient in front of the norm is negative, which
+#               # means we have `norm >= c`, which is not convex.
+#               error("Invalid second-order cone constraint $(normexpr) ≤ 0")
+#           end
+#           new{T}(normexpr)
+#       end
+#   end
 #
-# ##########################################################################
-# # GenericSOCConstraint
-# # Second-order cone constraint of form
-# # α||Ax-b||₂ + cᵀx + d ≤ 0
-# type GenericSOCConstraint{T<:GenericSOCExpr} <: AbstractConstraint
-#     normexpr::T
-#     function (::Type{GenericSOCConstraint{T}}){T}(normexpr::T)
-#         if normexpr.coeff < 0
-#             # The coefficient in front of the norm is negative, which
-#             # means we have `norm >= c`, which is not convex.
-#             error("Invalid second-order cone constraint $(normexpr) ≤ 0")
-#         end
-#         new{T}(normexpr)
-#     end
-# end
-#
-# # Alias for the AffExpr case
-# const SOCConstraint = GenericSOCConstraint{SOCExpr}
-#
-# """
-#     addconstraint(m::Model, c::SOCConstraint)
-#
-# Add a SOC constraint to `Model m`.
-# """
-# function addconstraint(m::Model, c::SOCConstraint)
-#     push!(m.socconstr,c)
-#     m.internalModelLoaded = false
-#     ConstraintRef{Model,SOCConstraint}(m,length(m.socconstr))
-# end
+#   # Alias for the AffExpr case
+#   const SOCConstraint = GenericSOCConstraint{SOCExpr}
+
+function VectorAffineConstraint(expr::SOCExpr)
+    affs = Vector{AffExpr}(1 + length(expr.norm.terms))
+    affs[1] = -expr.aff
+    for i in 1:length(expr.norm.terms)
+        affs[1+i] = expr.coeff * expr.norm.terms[i]
+    end
+    VectorAffineConstraint(affs, MOI.SecondOrderCone(1 + length(expr.norm.terms)))
+end
